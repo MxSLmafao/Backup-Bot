@@ -1,0 +1,25 @@
+{
+  "name": "discord-backup-bot",
+  "version": "1.0.0",
+  "description": "A Discord bot for backing up and restoring server configurations",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "deploy": "node src/deploy-commands.js"
+  },
+  "keywords": [
+    "discord",
+    "backup",
+    "bot",
+    "discord.js"
+  ],
+  "author": "MxSLmafao",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1"
+  },
+  "engines": {
+    "node": ">=16.11.0"
+  }
+}
