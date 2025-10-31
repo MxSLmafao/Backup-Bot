@@ -1,6 +1,6 @@
 # Discord Server Backup Bot
 
-A powerful Discord bot for creating complete backups of Discord servers and restoring them in case of raids, hacks, or accidental deletions.
+A powerful Discord bot for creating complete backups of Discord servers and restoring them in case of raids, hacks, or accidental deletions. Uses modern Discord slash commands for easy interaction.
 
 ## Features
 
@@ -75,38 +75,65 @@ npm install
    cp config.example.json config.json
    ```
 
-2. Edit `config.json` with your bot token:
+2. Edit `config.json` with your bot token and client ID:
    ```json
    {
      "token": "YOUR_BOT_TOKEN_HERE",
      "clientId": "YOUR_CLIENT_ID_HERE",
-     "prefix": "!",
      "backupPath": "./backups"
    }
    ```
+
+   - **token**: Your bot token from the Developer Portal
+   - **clientId**: Your application ID (found in "General Information" section)
+   - **backupPath**: Directory where backups will be stored
 
 ### Step 4: Create Your Discord Bot
 
 1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
 2. Click "New Application" and give it a name
-3. Go to the "Bot" section and click "Add Bot"
-4. Under "TOKEN", click "Reset Token" and copy your bot token
-5. Paste the token into `config.json`
-6. Enable the following **Privileged Gateway Intents**:
+3. Copy the **Application ID** from "General Information" - this is your `clientId`
+4. Go to the "Bot" section and click "Add Bot"
+5. Under "TOKEN", click "Reset Token" and copy your bot token
+6. Paste both the token and clientId into `config.json`
+7. Enable the following **Privileged Gateway Intents**:
    - ✅ Server Members Intent
-   - ✅ Message Content Intent
+   - ⚠️ Message Content Intent is NOT required (we use slash commands)
 
 ### Step 5: Invite the Bot to Your Server
 
 1. Go to the "OAuth2" > "URL Generator" section
 2. Select scopes:
    - ✅ `bot`
+   - ✅ `applications.commands` (required for slash commands)
 3. Select bot permissions:
    - ✅ Administrator (recommended for full functionality)
 4. Copy the generated URL and open it in your browser
 5. Select your server and authorize the bot
 
-### Step 6: Start the Bot
+### Step 6: Deploy Slash Commands
+
+Before starting the bot, you need to register the slash commands with Discord:
+
+```bash
+npm run deploy
+```
+
+You should see:
+```
+🔄 Started refreshing 4 application (/) commands.
+✅ Successfully reloaded 4 application (/) commands.
+
+Registered commands:
+  /backup - Create a complete backup of the server
+  /restore - Restore the server from a backup
+  /list - List all available backups for this server
+  /help - Show help information about the backup bot
+```
+
+⚠️ **Note**: Global commands may take up to 1 hour to appear in all servers. Be patient!
+
+### Step 7: Start the Bot
 
 ```bash
 npm start
@@ -115,60 +142,61 @@ npm start
 You should see:
 ```
 ✅ Bot is online as YourBot#1234
-📋 Prefix: !
 💾 Backup path: /path/to/backups
+
+📝 Available slash commands:
+  /backup - Create a backup of the server
+  /restore <backup-id> - Restore a backup
+  /list - List all available backups
+  /help - Show help message
 ```
 
 ## Usage
 
 ### Commands
 
-All commands require **Administrator** permission.
+All commands require **Administrator** permission and use Discord's slash command system.
 
-#### `!backup`
+#### `/backup`
 Creates a complete backup of the current server.
 
-```
-!backup
-```
+Simply type `/backup` and press Enter. The bot will create a backup file in the `backups/` directory with a timestamp-based ID.
 
-The bot will create a backup file in the `backups/` directory with a timestamp-based ID.
+**Features:**
+- Deferred reply for long operations
+- Automatic timestamp-based backup ID
+- Progress indication
 
-#### `!restore <backup-id>`
-Restores a server from a backup.
+#### `/restore <backup-id>`
+Restores a server from a backup with autocomplete support.
 
-```
-!restore 123456789_1234567890
-```
+Type `/restore` and start typing - the bot will show you a list of available backups with dates!
+
+**Features:**
+- Autocomplete for backup IDs
+- Interactive button confirmation (✅ Confirm / ❌ Cancel)
+- Shows backup date and time
+- 30-second timeout for confirmation
 
 ⚠️ **WARNING**: This will DELETE all current channels and roles before restoring!
 
-#### `!list`
+#### `/list`
 Lists all available backups for the current server.
 
-```
-!list
-```
+Type `/list` to see the 10 most recent backups with their IDs and timestamps. The response is ephemeral (only you can see it).
 
-Shows the 10 most recent backups with their IDs and timestamps.
-
-#### `!help`
+#### `/help`
 Displays help information.
 
-```
-!help
-```
+Type `/help` to see detailed information about all commands and features. The response is ephemeral (only you can see it).
 
 ## Example Workflow
 
 ### Creating a Backup
 
-1. Run the command:
-   ```
-   !backup
-   ```
+1. Type `/backup` in any channel
 
-2. Wait for the bot to complete (may take 10-30 seconds for large servers)
+2. Press Enter and wait for the bot to complete (may take 10-30 seconds for large servers)
 
 3. The bot will reply with:
    ```
@@ -181,21 +209,17 @@ Displays help information.
 
 ### Restoring a Backup
 
-1. List available backups:
-   ```
-   !list
-   ```
+1. Type `/restore` in any channel
 
-2. Choose a backup ID and run:
-   ```
-   !restore 123456789_1234567890
-   ```
+2. Start typing in the backup-id field - you'll see autocomplete suggestions with dates
 
-3. React with ✅ within 30 seconds to confirm
+3. Select a backup from the list (or paste a backup ID)
 
-4. Wait for the restore to complete (may take several minutes for large servers)
+4. Click the **✅ Confirm Restore** button within 30 seconds (or **❌ Cancel** to abort)
 
-5. The bot will reply when complete:
+5. Wait for the restore to complete (may take several minutes for large servers)
+
+6. The bot will update the message when complete:
    ```
    ✅ Backup restored successfully!
    ```

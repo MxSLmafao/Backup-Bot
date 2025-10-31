@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
+const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const { createBackup } = require('./backup');
@@ -17,13 +17,8 @@ try {
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildEmojisAndStickers,
-        GatewayIntentBits.GuildIntegrations,
-        GatewayIntentBits.GuildWebhooks,
-        GatewayIntentBits.GuildInvites
+        GatewayIntentBits.GuildEmojisAndStickers
     ]
 });
 
@@ -36,62 +31,96 @@ if (!fs.existsSync(backupPath)) {
 // Bot ready event
 client.once('ready', () => {
     console.log(`✅ Bot is online as ${client.user.tag}`);
-    console.log(`📋 Prefix: ${config.prefix}`);
     console.log(`💾 Backup path: ${backupPath}`);
-    console.log(`\n📝 Available commands:`);
-    console.log(`  ${config.prefix}backup - Create a backup of the server`);
-    console.log(`  ${config.prefix}restore <backup-id> - Restore a backup`);
-    console.log(`  ${config.prefix}list - List all available backups`);
-    console.log(`  ${config.prefix}help - Show help message`);
+    console.log(`\n📝 Available slash commands:`);
+    console.log(`  /backup - Create a backup of the server`);
+    console.log(`  /restore <backup-id> - Restore a backup`);
+    console.log(`  /list - List all available backups`);
+    console.log(`  /help - Show help message`);
+    console.log(`\n💡 If commands don't appear, run: npm run deploy`);
 });
 
-// Message handler
-client.on('messageCreate', async (message) => {
-    // Ignore bot messages and messages without prefix
-    if (message.author.bot || !message.content.startsWith(config.prefix)) return;
-
-    // Parse command and arguments
-    const args = message.content.slice(config.prefix.length).trim().split(/ +/);
-    const command = args.shift().toLowerCase();
-
-    // Check if user has administrator permission
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return message.reply('❌ You need Administrator permission to use this bot.');
+// Interaction handler (slash commands)
+client.on('interactionCreate', async (interaction) => {
+    // Handle autocomplete for backup-id option
+    if (interaction.isAutocomplete()) {
+        return handleAutocomplete(interaction);
     }
 
-    try {
-        switch (command) {
-            case 'backup':
-                await handleBackup(message);
-                break;
+    // Handle slash commands
+    if (interaction.isChatInputCommand()) {
+        try {
+            switch (interaction.commandName) {
+                case 'backup':
+                    await handleBackup(interaction);
+                    break;
 
-            case 'restore':
-                await handleRestore(message, args);
-                break;
+                case 'restore':
+                    await handleRestore(interaction);
+                    break;
 
-            case 'list':
-                await handleList(message);
-                break;
+                case 'list':
+                    await handleList(interaction);
+                    break;
 
-            case 'help':
-                await handleHelp(message);
-                break;
+                case 'help':
+                    await handleHelp(interaction);
+                    break;
+            }
+        } catch (error) {
+            console.error('Command error:', error);
+            const errorMessage = `❌ An error occurred: ${error.message}`;
 
-            default:
-                await message.reply(`❌ Unknown command. Use \`${config.prefix}help\` for available commands.`);
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply(errorMessage);
+            } else {
+                await interaction.reply({ content: errorMessage, ephemeral: true });
+            }
         }
-    } catch (error) {
-        console.error('Command error:', error);
-        await message.reply(`❌ An error occurred: ${error.message}`);
+    }
+
+    // Handle button interactions (for restore confirmation)
+    if (interaction.isButton()) {
+        await handleButton(interaction);
     }
 });
+
+// Autocomplete handler for backup IDs
+async function handleAutocomplete(interaction) {
+    if (interaction.commandName === 'restore') {
+        const guildId = interaction.guild.id;
+        const focusedValue = interaction.options.getFocused().toLowerCase();
+
+        // Get all backup files for this guild
+        const files = fs.readdirSync(backupPath)
+            .filter(file => file.startsWith(guildId) && file.endsWith('.json'))
+            .sort()
+            .reverse();
+
+        // Filter and format choices
+        const choices = files
+            .map(file => {
+                const backupId = file.replace('.json', '');
+                const timestamp = parseInt(backupId.split('_')[1]);
+                const date = new Date(timestamp);
+                return {
+                    name: `${date.toLocaleString()} - ${backupId}`,
+                    value: backupId
+                };
+            })
+            .filter(choice => choice.value.toLowerCase().includes(focusedValue))
+            .slice(0, 25); // Discord limits to 25 choices
+
+        await interaction.respond(choices);
+    }
+}
 
 // Backup command handler
-async function handleBackup(message) {
-    const loadingMsg = await message.reply('🔄 Creating backup... This may take a while.');
+async function handleBackup(interaction) {
+    await interaction.deferReply();
 
     try {
-        const guild = message.guild;
+        const guild = interaction.guild;
         const backup = await createBackup(guild);
 
         // Generate backup ID (timestamp-based)
@@ -101,58 +130,85 @@ async function handleBackup(message) {
         // Save backup to file
         fs.writeFileSync(backupFile, JSON.stringify(backup, null, 2));
 
-        await loadingMsg.edit(`✅ Backup created successfully!\n📦 Backup ID: \`${backupId}\`\n💾 File: \`${backupId}.json\``);
+        await interaction.editReply(`✅ Backup created successfully!\n📦 Backup ID: \`${backupId}\`\n💾 File: \`${backupId}.json\``);
     } catch (error) {
         console.error('Backup error:', error);
-        await loadingMsg.edit(`❌ Failed to create backup: ${error.message}`);
+        await interaction.editReply(`❌ Failed to create backup: ${error.message}`);
     }
 }
 
 // Restore command handler
-async function handleRestore(message, args) {
-    if (args.length === 0) {
-        return message.reply(`❌ Please provide a backup ID. Use \`${config.prefix}list\` to see available backups.`);
-    }
-
-    const backupId = args[0];
+async function handleRestore(interaction) {
+    const backupId = interaction.options.getString('backup-id');
     const backupFile = path.join(backupPath, `${backupId}.json`);
 
     if (!fs.existsSync(backupFile)) {
-        return message.reply(`❌ Backup not found: \`${backupId}\``);
+        return interaction.reply({
+            content: `❌ Backup not found: \`${backupId}\``,
+            ephemeral: true
+        });
     }
 
-    // Confirmation message
-    const confirmMsg = await message.reply('⚠️ **WARNING**: Restoring a backup will DELETE all current channels and roles!\nReact with ✅ within 30 seconds to confirm.');
-    await confirmMsg.react('✅');
+    // Create confirmation buttons
+    const row = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId(`restore_confirm_${backupId}`)
+                .setLabel('✅ Confirm Restore')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('restore_cancel')
+                .setLabel('❌ Cancel')
+                .setStyle(ButtonStyle.Secondary)
+        );
 
-    // Wait for confirmation
-    const filter = (reaction, user) => reaction.emoji.name === '✅' && user.id === message.author.id;
-    const collected = await confirmMsg.awaitReactions({ filter, max: 1, time: 30000, errors: ['time'] })
-        .catch(() => null);
+    await interaction.reply({
+        content: '⚠️ **WARNING**: Restoring a backup will DELETE all current channels and roles!\nClick the button below to confirm within 30 seconds.',
+        components: [row],
+        ephemeral: true
+    });
+}
 
-    if (!collected) {
-        return confirmMsg.edit('❌ Restore cancelled - timeout.');
-    }
+// Button interaction handler
+async function handleButton(interaction) {
+    if (interaction.customId.startsWith('restore_confirm_')) {
+        const backupId = interaction.customId.replace('restore_confirm_', '');
+        const backupFile = path.join(backupPath, `${backupId}.json`);
 
-    await confirmMsg.edit('🔄 Restoring backup... This may take several minutes. Please be patient!');
+        await interaction.update({
+            content: '🔄 Restoring backup... This may take several minutes. Please be patient!',
+            components: []
+        });
 
-    try {
-        // Load backup data
-        const backupData = JSON.parse(fs.readFileSync(backupFile, 'utf-8'));
+        try {
+            // Load backup data
+            const backupData = JSON.parse(fs.readFileSync(backupFile, 'utf-8'));
 
-        // Restore the backup
-        await restoreBackup(message.guild, backupData);
+            // Restore the backup
+            await restoreBackup(interaction.guild, backupData);
 
-        await confirmMsg.edit('✅ Backup restored successfully!');
-    } catch (error) {
-        console.error('Restore error:', error);
-        await confirmMsg.edit(`❌ Failed to restore backup: ${error.message}`);
+            await interaction.editReply({
+                content: '✅ Backup restored successfully!',
+                components: []
+            });
+        } catch (error) {
+            console.error('Restore error:', error);
+            await interaction.editReply({
+                content: `❌ Failed to restore backup: ${error.message}`,
+                components: []
+            });
+        }
+    } else if (interaction.customId === 'restore_cancel') {
+        await interaction.update({
+            content: '❌ Restore cancelled.',
+            components: []
+        });
     }
 }
 
 // List backups command handler
-async function handleList(message) {
-    const guildId = message.guild.id;
+async function handleList(interaction) {
+    const guildId = interaction.guild.id;
 
     // Get all backup files for this guild
     const files = fs.readdirSync(backupPath)
@@ -161,7 +217,10 @@ async function handleList(message) {
         .reverse();
 
     if (files.length === 0) {
-        return message.reply('📋 No backups found for this server.');
+        return interaction.reply({
+            content: '📋 No backups found for this server.',
+            ephemeral: true
+        });
     }
 
     // Format backup list
@@ -169,22 +228,25 @@ async function handleList(message) {
         const backupId = file.replace('.json', '');
         const timestamp = parseInt(backupId.split('_')[1]);
         const date = new Date(timestamp);
-        return `${index + 1}. \`${backupId}\` - ${date.toLocaleString()}`;
-    }).join('\n');
+        return `${index + 1}. \`${backupId}\`\n   📅 ${date.toLocaleString()}`;
+    }).join('\n\n');
 
-    await message.reply(`📋 **Available Backups** (showing last 10):\n${backupList}\n\nUse \`${config.prefix}restore <backup-id>\` to restore a backup.`);
+    await interaction.reply({
+        content: `📋 **Available Backups** (showing last 10):\n\n${backupList}\n\nUse \`/restore\` to restore a backup.`,
+        ephemeral: true
+    });
 }
 
 // Help command handler
-async function handleHelp(message) {
+async function handleHelp(interaction) {
     const helpText = `
 **📚 Discord Backup Bot - Help**
 
 **Commands:**
-\`${config.prefix}backup\` - Create a complete backup of the server
-\`${config.prefix}restore <backup-id>\` - Restore a backup by ID
-\`${config.prefix}list\` - List all available backups
-\`${config.prefix}help\` - Show this help message
+\`/backup\` - Create a complete backup of the server
+\`/restore <backup-id>\` - Restore a backup by ID (with autocomplete)
+\`/list\` - List all available backups
+\`/help\` - Show this help message
 
 **What gets backed up:**
 ✅ Server settings (name, icon, banner, description)
@@ -202,7 +264,7 @@ async function handleHelp(message) {
 **Note:** Message history, members, and bans are NOT backed up.
     `;
 
-    await message.reply(helpText);
+    await interaction.reply({ content: helpText, ephemeral: true });
 }
 
 // Error handlers
