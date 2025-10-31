@@ -70,32 +70,30 @@ npm install
 
 ### Step 3: Configure the Bot
 
-1. Copy the example configuration file:
+1. Copy the example environment file:
    ```bash
-   cp config.example.json config.json
+   cp .env.example .env
    ```
 
-2. Edit `config.json` with your bot token and client ID:
-   ```json
-   {
-     "token": "YOUR_BOT_TOKEN_HERE",
-     "clientId": "YOUR_CLIENT_ID_HERE",
-     "backupPath": "./backups"
-   }
+2. Edit `.env` with your bot token and client ID:
+   ```env
+   DISCORD_TOKEN=your_bot_token_here
+   DISCORD_CLIENT_ID=your_client_id_here
+   BACKUP_PATH=./backups
    ```
 
-   - **token**: Your bot token from the Developer Portal
-   - **clientId**: Your application ID (found in "General Information" section)
-   - **backupPath**: Directory where backups will be stored
+   - **DISCORD_TOKEN**: Your bot token from the Developer Portal
+   - **DISCORD_CLIENT_ID**: Your application ID (found in "General Information" section)
+   - **BACKUP_PATH**: Directory where backups will be stored (optional, defaults to ./backups)
 
 ### Step 4: Create Your Discord Bot
 
 1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
 2. Click "New Application" and give it a name
-3. Copy the **Application ID** from "General Information" - this is your `clientId`
+3. Copy the **Application ID** from "General Information" - this is your `DISCORD_CLIENT_ID`
 4. Go to the "Bot" section and click "Add Bot"
 5. Under "TOKEN", click "Reset Token" and copy your bot token
-6. Paste both the token and clientId into `config.json`
+6. Paste both the token and client ID into your `.env` file
 7. Enable the following **Privileged Gateway Intents**:
    - ✅ Server Members Intent
    - ⚠️ Message Content Intent is NOT required (we use slash commands)

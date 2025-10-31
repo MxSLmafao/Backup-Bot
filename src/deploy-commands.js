@@ -1,12 +1,11 @@
+require('dotenv').config();
 const { REST, Routes } = require('discord.js');
 const { commands } = require('./commands');
 
-// Load configuration
-let config;
-try {
-    config = require('../config.json');
-} catch (error) {
-    console.error('Error: config.json not found. Please copy config.example.json to config.json and fill in your bot token.');
+// Load configuration from environment variables
+if (!process.env.DISCORD_TOKEN || !process.env.DISCORD_CLIENT_ID) {
+    console.error('Error: Missing required environment variables.');
+    console.error('Please copy .env.example to .env and fill in your Discord bot token and client ID.');
     process.exit(1);
 }
 
@@ -14,7 +13,7 @@ try {
 const commandsData = commands.map(command => command.toJSON());
 
 // Create REST instance
-const rest = new REST({ version: '10' }).setToken(config.token);
+const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
 // Deploy commands
 (async () => {
@@ -24,7 +23,7 @@ const rest = new REST({ version: '10' }).setToken(config.token);
         // Register commands globally (takes up to 1 hour to propagate)
         // For instant updates during development, use guild-specific commands instead
         const data = await rest.put(
-            Routes.applicationCommands(config.clientId),
+            Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
             { body: commandsData },
         );
 

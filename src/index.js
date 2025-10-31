@@ -1,17 +1,22 @@
+require('dotenv').config();
 const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const { createBackup } = require('./backup');
 const { restoreBackup } = require('./restore');
 
-// Load configuration
-let config;
-try {
-    config = require('../config.json');
-} catch (error) {
-    console.error('Error: config.json not found. Please copy config.example.json to config.json and fill in your bot token.');
+// Load configuration from environment variables
+if (!process.env.DISCORD_TOKEN || !process.env.DISCORD_CLIENT_ID) {
+    console.error('Error: Missing required environment variables.');
+    console.error('Please copy .env.example to .env and fill in your Discord bot token and client ID.');
     process.exit(1);
 }
+
+const config = {
+    token: process.env.DISCORD_TOKEN,
+    clientId: process.env.DISCORD_CLIENT_ID,
+    backupPath: process.env.BACKUP_PATH || './backups'
+};
 
 // Create Discord client
 const client = new Client({
@@ -23,7 +28,7 @@ const client = new Client({
 });
 
 // Ensure backup directory exists
-const backupPath = path.resolve(config.backupPath || './backups');
+const backupPath = path.resolve(config.backupPath);
 if (!fs.existsSync(backupPath)) {
     fs.mkdirSync(backupPath, { recursive: true });
 }
