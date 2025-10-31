@@ -210,4 +210,28 @@ async function backupEmojis(guild) {
     return emojis;
 }
 
-module.exports = { createBackup };
+/**
+ * Creates a channels-only backup of a Discord guild
+ * @param {Guild} guild - The Discord guild to backup
+ * @returns {Object} Backup data object with only channels
+ */
+async function createChannelsBackup(guild) {
+    console.log(`Creating channels-only backup for guild: ${guild.name} (${guild.id})`);
+
+    const backup = {
+        metadata: {
+            backupVersion: '1.0.0',
+            backupType: 'channels-only',
+            guildId: guild.id,
+            guildName: guild.name,
+            timestamp: new Date().toISOString(),
+            memberCount: guild.memberCount
+        },
+        channels: await backupChannels(guild)
+    };
+
+    console.log('Channels-only backup created successfully');
+    return backup;
+}
+
+module.exports = { createBackup, createChannelsBackup };

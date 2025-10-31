@@ -3,8 +3,8 @@ const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle 
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
-const { createBackup } = require('./backup');
-const { restoreBackup } = require('./restore');
+const { createBackup, createChannelsBackup } = require('./backup');
+const { restoreBackup, restoreChannelsOnly } = require('./restore');
 
 // Load configuration from environment variables
 if (!process.env.DISCORD_TOKEN || !process.env.DISCORD_CLIENT_ID) {
@@ -70,6 +70,14 @@ client.on('interactionCreate', async (interaction) => {
                     await handleRestore(interaction);
                     break;
 
+                case 'backup-channels':
+                    await handleBackupChannels(interaction);
+                    break;
+
+                case 'restore-channels':
+                    await handleRestoreChannels(interaction);
+                    break;
+
                 case 'list':
                     await handleList(interaction);
                     break;
@@ -98,7 +106,7 @@ client.on('interactionCreate', async (interaction) => {
 
 // Autocomplete handler for backup IDs
 async function handleAutocomplete(interaction) {
-    if (interaction.commandName === 'restore') {
+    if (interaction.commandName === 'restore' || interaction.commandName === 'restore-channels') {
         const guildId = interaction.guild.id;
         const focusedValue = interaction.options.getFocused().toLowerCase();
 
@@ -205,10 +213,85 @@ async function handleRestore(interaction) {
     });
 }
 
+// Backup channels command handler
+async function handleBackupChannels(interaction) {
+    await interaction.deferReply();
+
+    try {
+        const guild = interaction.guild;
+        const backup = await createChannelsBackup(guild);
+
+        // Generate backup ID (timestamp-based with channels suffix)
+        const backupId = `${guild.id}_${Date.now()}_channels`;
+        const backupFile = path.join(backupPath, `${backupId}.json.gz`);
+
+        // Convert backup to JSON and compress with gzip
+        const jsonData = JSON.stringify(backup, null, 2);
+        const compressed = zlib.gzipSync(jsonData);
+
+        // Save compressed backup to file
+        fs.writeFileSync(backupFile, compressed);
+
+        // Calculate file sizes for display
+        const originalSize = (Buffer.byteLength(jsonData) / 1024).toFixed(1);
+        const compressedSize = (compressed.length / 1024).toFixed(1);
+        const compressionRatio = ((1 - compressed.length / Buffer.byteLength(jsonData)) * 100).toFixed(0);
+
+        await interaction.editReply(
+            `✅ Channels backup created successfully!\n` +
+            `📦 Backup ID: \`${backupId}\`\n` +
+            `💾 File: \`${backupId}.json.gz\`\n` +
+            `📊 Size: ${compressedSize}KB (${compressionRatio}% compression from ${originalSize}KB)\n` +
+            `📝 Type: Channels only (no roles or server settings)`
+        );
+    } catch (error) {
+        console.error('Channels backup error:', error);
+        await interaction.editReply(`❌ Failed to create channels backup: ${error.message}`);
+    }
+}
+
+// Restore channels command handler
+async function handleRestoreChannels(interaction) {
+    const backupId = interaction.options.getString('backup-id');
+
+    // Check for both compressed and uncompressed backup files
+    let backupFile = path.join(backupPath, `${backupId}.json.gz`);
+    if (!fs.existsSync(backupFile)) {
+        // Fallback to uncompressed for backwards compatibility
+        backupFile = path.join(backupPath, `${backupId}.json`);
+        if (!fs.existsSync(backupFile)) {
+            return interaction.reply({
+                content: `❌ Backup not found: \`${backupId}\``,
+                ephemeral: true
+            });
+        }
+    }
+
+    // Create confirmation buttons
+    const row = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId(`restore_channels_confirm_${backupId}`)
+                .setLabel('✅ Confirm Restore Channels')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('restore_cancel')
+                .setLabel('❌ Cancel')
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+    await interaction.reply({
+        content: '⚠️ **WARNING**: Restoring channels will DELETE all current channels!\nRoles and server settings will NOT be affected.\nClick the button below to confirm within 30 seconds.',
+        components: [row],
+        ephemeral: true
+    });
+}
+
 // Button interaction handler
 async function handleButton(interaction) {
-    if (interaction.customId.startsWith('restore_confirm_')) {
-        const backupId = interaction.customId.replace('restore_confirm_', '');
+    if (interaction.customId.startsWith('restore_confirm_') || interaction.customId.startsWith('restore_channels_confirm_')) {
+        const isChannelsOnly = interaction.customId.startsWith('restore_channels_confirm_');
+        const backupId = interaction.customId.replace(isChannelsOnly ? 'restore_channels_confirm_' : 'restore_confirm_', '');
 
         // Check for both compressed and uncompressed backup files
         let backupFile = path.join(backupPath, `${backupId}.json.gz`);
@@ -239,8 +322,12 @@ async function handleButton(interaction) {
                 backupData = JSON.parse(fs.readFileSync(backupFile, 'utf-8'));
             }
 
-            // Restore the backup
-            await restoreBackup(interaction.guild, backupData);
+            // Restore the backup (channels only or full)
+            if (isChannelsOnly) {
+                await restoreChannelsOnly(interaction.guild, backupData);
+            } else {
+                await restoreBackup(interaction.guild, backupData);
+            }
 
             // Try to edit reply, but if interaction expired, send new message
             try {

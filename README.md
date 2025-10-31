@@ -148,8 +148,10 @@ You should see:
 💾 Backup path: /path/to/backups
 
 📝 Available slash commands:
-  /backup - Create a backup of the server
-  /restore <backup-id> - Restore a backup
+  /backup - Create a complete backup of the server
+  /restore <backup-id> - Restore a complete backup
+  /backup-channels - Create a channels-only backup
+  /restore-channels <backup-id> - Restore only channels from a backup
   /list - List all available backups
   /help - Show help message
 ```
@@ -186,6 +188,37 @@ Type `/restore` and start typing - the bot will show you a list of available bac
 - 30-second timeout for confirmation
 
 ⚠️ **WARNING**: This will DELETE all current channels and roles before restoring!
+
+#### `/backup-channels`
+Creates a backup of **channels only** (no roles or server settings).
+
+This is useful when you want to backup just your channel structure without affecting roles or server configuration. The backup is much smaller and faster.
+
+**Features:**
+- Backs up only channels and their permissions
+- Faster backup process
+- Smaller file size
+- Backup ID includes `_channels` suffix for easy identification
+- Gzip compression
+
+**Use cases:**
+- Reorganizing channels without affecting roles
+- Creating channel templates
+- Quick channel structure backups
+
+#### `/restore-channels <backup-id>`
+Restores **only channels** from a backup.
+
+This command restores channels from any backup (full or channels-only) but leaves roles and server settings untouched. Existing roles are used for channel permissions.
+
+**Features:**
+- Works with both full backups and channels-only backups
+- Preserves existing roles and server settings
+- Maps channel permissions to existing roles by name
+- Interactive button confirmation
+- Autocomplete for backup selection
+
+⚠️ **WARNING**: This will DELETE all current channels but will NOT touch roles or server settings!
 
 #### `/list`
 Lists all available backups for the current server.
@@ -231,6 +264,33 @@ Type `/help` to see detailed information about all commands and features. The re
    ```
    ✅ Backup restored successfully!
    ```
+
+### Creating a Channels-Only Backup
+
+1. Type `/backup-channels` in any channel
+
+2. The bot will create a backup containing only channels (faster than a full backup)
+
+3. The bot will reply with:
+   ```
+   ✅ Channels backup created successfully!
+   📦 Backup ID: 123456789_1234567890_channels
+   💾 File: 123456789_1234567890_channels.json.gz
+   📊 Size: 45.2KB (68% compression from 140.8KB)
+   📝 Type: Channels only (no roles or server settings)
+   ```
+
+### Restoring Channels Only
+
+1. Type `/restore-channels` in any channel
+
+2. Select a backup (can be either a full backup or channels-only backup)
+
+3. Click **✅ Confirm Restore Channels** to proceed
+
+4. The bot will delete and recreate all channels while preserving existing roles and server settings
+
+**Note:** Channel permissions will be mapped to existing roles by name. If a role name doesn't exist, those permissions will be skipped.
 
 ## Important Notes
 

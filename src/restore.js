@@ -356,4 +356,31 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-module.exports = { restoreBackup };
+/**
+ * Restores only channels from backup data
+ * @param {Guild} guild - The Discord guild to restore to
+ * @param {Object} backupData - The backup data object
+ */
+async function restoreChannelsOnly(guild, backupData) {
+    console.log(`Starting channels-only restore for guild: ${guild.name} (${guild.id})`);
+
+    // Step 1: Delete existing channels
+    await deleteExistingChannels(guild);
+
+    // Step 2: Build role map from existing roles in the guild
+    const roleMap = new Map();
+    roleMap.set('@everyone', guild.roles.everyone);
+
+    for (const role of guild.roles.cache.values()) {
+        roleMap.set(role.name, role);
+    }
+
+    console.log(`Using ${roleMap.size} existing roles for channel permissions`);
+
+    // Step 3: Restore channels
+    await restoreChannels(guild, backupData.channels, roleMap);
+
+    console.log('Channels-only restore completed successfully');
+}
+
+module.exports = { restoreBackup, restoreChannelsOnly };
