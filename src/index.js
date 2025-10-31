@@ -2,6 +2,7 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { createBackup } = require('./backup');
 const { restoreBackup } = require('./restore');
 
@@ -101,20 +102,26 @@ async function handleAutocomplete(interaction) {
         const guildId = interaction.guild.id;
         const focusedValue = interaction.options.getFocused().toLowerCase();
 
-        // Get all backup files for this guild
+        // Get all backup files for this guild (support both .json.gz and .json)
         const files = fs.readdirSync(backupPath)
-            .filter(file => file.startsWith(guildId) && file.endsWith('.json'))
+            .filter(file => file.startsWith(guildId) && (file.endsWith('.json.gz') || file.endsWith('.json')))
             .sort()
             .reverse();
 
         // Filter and format choices
         const choices = files
             .map(file => {
-                const backupId = file.replace('.json', '');
+                const backupId = file.replace('.json.gz', '').replace('.json', '');
                 const timestamp = parseInt(backupId.split('_')[1]);
                 const date = new Date(timestamp);
+
+                // Get file size
+                const filePath = path.join(backupPath, file);
+                const stats = fs.statSync(filePath);
+                const sizeKB = (stats.size / 1024).toFixed(1);
+
                 return {
-                    name: `${date.toLocaleString()} - ${backupId}`,
+                    name: `${date.toLocaleString()} - ${sizeKB}KB`,
                     value: backupId
                 };
             })
@@ -135,12 +142,26 @@ async function handleBackup(interaction) {
 
         // Generate backup ID (timestamp-based)
         const backupId = `${guild.id}_${Date.now()}`;
-        const backupFile = path.join(backupPath, `${backupId}.json`);
+        const backupFile = path.join(backupPath, `${backupId}.json.gz`);
 
-        // Save backup to file
-        fs.writeFileSync(backupFile, JSON.stringify(backup, null, 2));
+        // Convert backup to JSON and compress with gzip
+        const jsonData = JSON.stringify(backup, null, 2);
+        const compressed = zlib.gzipSync(jsonData);
 
-        await interaction.editReply(`✅ Backup created successfully!\n📦 Backup ID: \`${backupId}\`\n💾 File: \`${backupId}.json\``);
+        // Save compressed backup to file
+        fs.writeFileSync(backupFile, compressed);
+
+        // Calculate file sizes for display
+        const originalSize = (Buffer.byteLength(jsonData) / 1024).toFixed(1);
+        const compressedSize = (compressed.length / 1024).toFixed(1);
+        const compressionRatio = ((1 - compressed.length / Buffer.byteLength(jsonData)) * 100).toFixed(0);
+
+        await interaction.editReply(
+            `✅ Backup created successfully!\n` +
+            `📦 Backup ID: \`${backupId}\`\n` +
+            `💾 File: \`${backupId}.json.gz\`\n` +
+            `📊 Size: ${compressedSize}KB (${compressionRatio}% compression from ${originalSize}KB)`
+        );
     } catch (error) {
         console.error('Backup error:', error);
         await interaction.editReply(`❌ Failed to create backup: ${error.message}`);
@@ -150,13 +171,18 @@ async function handleBackup(interaction) {
 // Restore command handler
 async function handleRestore(interaction) {
     const backupId = interaction.options.getString('backup-id');
-    const backupFile = path.join(backupPath, `${backupId}.json`);
 
+    // Check for both compressed and uncompressed backup files
+    let backupFile = path.join(backupPath, `${backupId}.json.gz`);
     if (!fs.existsSync(backupFile)) {
-        return interaction.reply({
-            content: `❌ Backup not found: \`${backupId}\``,
-            ephemeral: true
-        });
+        // Fallback to uncompressed for backwards compatibility
+        backupFile = path.join(backupPath, `${backupId}.json`);
+        if (!fs.existsSync(backupFile)) {
+            return interaction.reply({
+                content: `❌ Backup not found: \`${backupId}\``,
+                ephemeral: true
+            });
+        }
     }
 
     // Create confirmation buttons
@@ -183,7 +209,15 @@ async function handleRestore(interaction) {
 async function handleButton(interaction) {
     if (interaction.customId.startsWith('restore_confirm_')) {
         const backupId = interaction.customId.replace('restore_confirm_', '');
-        const backupFile = path.join(backupPath, `${backupId}.json`);
+
+        // Check for both compressed and uncompressed backup files
+        let backupFile = path.join(backupPath, `${backupId}.json.gz`);
+        let isCompressed = fs.existsSync(backupFile);
+
+        if (!isCompressed) {
+            // Fallback to uncompressed for backwards compatibility
+            backupFile = path.join(backupPath, `${backupId}.json`);
+        }
 
         await interaction.update({
             content: '🔄 Restoring backup... This may take several minutes. Please be patient!',
@@ -191,8 +225,15 @@ async function handleButton(interaction) {
         });
 
         try {
-            // Load backup data
-            const backupData = JSON.parse(fs.readFileSync(backupFile, 'utf-8'));
+            // Load and decompress backup data
+            let backupData;
+            if (isCompressed) {
+                const compressedData = fs.readFileSync(backupFile);
+                const decompressed = zlib.gunzipSync(compressedData);
+                backupData = JSON.parse(decompressed.toString('utf-8'));
+            } else {
+                backupData = JSON.parse(fs.readFileSync(backupFile, 'utf-8'));
+            }
 
             // Restore the backup
             await restoreBackup(interaction.guild, backupData);
@@ -220,9 +261,9 @@ async function handleButton(interaction) {
 async function handleList(interaction) {
     const guildId = interaction.guild.id;
 
-    // Get all backup files for this guild
+    // Get all backup files for this guild (support both .json.gz and .json)
     const files = fs.readdirSync(backupPath)
-        .filter(file => file.startsWith(guildId) && file.endsWith('.json'))
+        .filter(file => file.startsWith(guildId) && (file.endsWith('.json.gz') || file.endsWith('.json')))
         .sort()
         .reverse();
 
@@ -235,14 +276,21 @@ async function handleList(interaction) {
 
     // Format backup list
     const backupList = files.slice(0, 10).map((file, index) => {
-        const backupId = file.replace('.json', '');
+        const backupId = file.replace('.json.gz', '').replace('.json', '');
         const timestamp = parseInt(backupId.split('_')[1]);
         const date = new Date(timestamp);
-        return `${index + 1}. \`${backupId}\`\n   📅 ${date.toLocaleString()}`;
+
+        // Get file size
+        const filePath = path.join(backupPath, file);
+        const stats = fs.statSync(filePath);
+        const sizeKB = (stats.size / 1024).toFixed(1);
+        const compressed = file.endsWith('.json.gz') ? ' 🗜️' : '';
+
+        return `${index + 1}. \`${backupId}\`${compressed}\n   📅 ${date.toLocaleString()} • 💾 ${sizeKB}KB`;
     }).join('\n\n');
 
     await interaction.reply({
-        content: `📋 **Available Backups** (showing last 10):\n\n${backupList}\n\nUse \`/restore\` to restore a backup.`,
+        content: `📋 **Available Backups** (showing last 10):\n\n${backupList}\n\nUse \`/restore\` to restore a backup.\n🗜️ = Compressed`,
         ephemeral: true
     });
 }

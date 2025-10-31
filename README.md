@@ -163,11 +163,13 @@ All commands require **Administrator** permission and use Discord's slash comman
 #### `/backup`
 Creates a complete backup of the current server.
 
-Simply type `/backup` and press Enter. The bot will create a backup file in the `backups/` directory with a timestamp-based ID.
+Simply type `/backup` and press Enter. The bot will create a compressed backup file in the `backups/` directory with a timestamp-based ID.
 
 **Features:**
 - Deferred reply for long operations
 - Automatic timestamp-based backup ID
+- **Gzip compression** for efficient storage (typically 60-80% smaller)
+- Shows compression ratio and file sizes
 - Progress indication
 
 #### `/restore <backup-id>`
@@ -176,9 +178,11 @@ Restores a server from a backup with autocomplete support.
 Type `/restore` and start typing - the bot will show you a list of available backups with dates!
 
 **Features:**
-- Autocomplete for backup IDs
+- Autocomplete for backup IDs with file sizes
 - Interactive button confirmation (✅ Confirm / ❌ Cancel)
-- Shows backup date and time
+- Shows backup date, time, and size
+- Automatic decompression of gzip backups
+- Backwards compatible with uncompressed backups
 - 30-second timeout for confirmation
 
 ⚠️ **WARNING**: This will DELETE all current channels and roles before restoring!
@@ -186,7 +190,7 @@ Type `/restore` and start typing - the bot will show you a list of available bac
 #### `/list`
 Lists all available backups for the current server.
 
-Type `/list` to see the 10 most recent backups with their IDs and timestamps. The response is ephemeral (only you can see it).
+Type `/list` to see the 10 most recent backups with their IDs, timestamps, and file sizes. Compressed backups are marked with 🗜️. The response is ephemeral (only you can see it).
 
 #### `/help`
 Displays help information.
@@ -205,16 +209,17 @@ Type `/help` to see detailed information about all commands and features. The re
    ```
    ✅ Backup created successfully!
    📦 Backup ID: 123456789_1234567890
-   💾 File: 123456789_1234567890.json
+   💾 File: 123456789_1234567890.json.gz
+   📊 Size: 120.5KB (73% compression from 450.2KB)
    ```
 
-4. The backup file is saved in the `backups/` directory
+4. The compressed backup file is saved in the `backups/` directory
 
 ### Restoring a Backup
 
 1. Type `/restore` in any channel
 
-2. Start typing in the backup-id field - you'll see autocomplete suggestions with dates
+2. Start typing in the backup-id field - you'll see autocomplete suggestions with dates and file sizes
 
 3. Select a backup from the list (or paste a backup ID)
 
@@ -244,11 +249,14 @@ Type `/help` to see detailed information about all commands and features. The re
 ### Backup Storage
 
 - Backups are stored locally in the `backups/` folder in your project directory
-- Each backup file is in JSON format and contains all server data
-- Backup files are named: `{guildId}_{timestamp}.json`
+- Each backup file is compressed with **gzip** for efficient storage
+- Backup files are named: `{guildId}_{timestamp}.json.gz`
+- **Compression**: Typically achieves 60-80% size reduction
+  - Example: A 500KB JSON file compresses to ~100KB
+  - Large servers: ~1-3 MB compressed (vs 5-15 MB uncompressed)
 - **Important**: Consider backing up the `backups/` directory to cloud storage for safety
-- Backup files can be large (1-10 MB) for servers with many channels/roles
 - You can customize the backup location using the `BACKUP_PATH` environment variable
+- **Backwards Compatible**: The bot can still restore old uncompressed `.json` backups
 
 ### Limitations
 
