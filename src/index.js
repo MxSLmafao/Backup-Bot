@@ -40,7 +40,7 @@ if (!fs.existsSync(backupPath)) {
 }
 
 // Bot ready event
-client.once('ready', () => {
+client.once('clientReady', () => {
     console.log(`✅ Bot is online as ${client.user.tag}`);
     console.log(`💾 Backup path: ${backupPath}`);
     console.log(`\n📝 Available slash commands:`);
@@ -224,6 +224,10 @@ async function handleButton(interaction) {
             components: []
         });
 
+        // Store channel reference for updates if interaction expires
+        const channel = interaction.channel;
+        const userId = interaction.user.id;
+
         try {
             // Load and decompress backup data
             let backupData;
@@ -238,16 +242,27 @@ async function handleButton(interaction) {
             // Restore the backup
             await restoreBackup(interaction.guild, backupData);
 
-            await interaction.editReply({
-                content: '✅ Backup restored successfully!',
-                components: []
-            });
+            // Try to edit reply, but if interaction expired, send new message
+            try {
+                await interaction.editReply({
+                    content: '✅ Backup restored successfully!',
+                    components: []
+                });
+            } catch (interactionError) {
+                // Interaction expired (15 min timeout), send new message
+                await channel.send(`<@${userId}> ✅ Backup restored successfully!`);
+            }
         } catch (error) {
             console.error('Restore error:', error);
-            await interaction.editReply({
-                content: `❌ Failed to restore backup: ${error.message}`,
-                components: []
-            });
+            try {
+                await interaction.editReply({
+                    content: `❌ Failed to restore backup: ${error.message}`,
+                    components: []
+                });
+            } catch (interactionError) {
+                // Interaction expired, send new message
+                await channel.send(`<@${userId}> ❌ Failed to restore backup: ${error.message}`);
+            }
         }
     } else if (interaction.customId === 'restore_cancel') {
         await interaction.update({

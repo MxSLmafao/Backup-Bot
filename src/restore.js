@@ -136,7 +136,7 @@ async function restoreRoles(guild, roles) {
         try {
             const createData = {
                 name: roleData.name,
-                color: roleData.color,
+                color: roleData.color || 0,
                 hoist: roleData.hoist,
                 permissions: BigInt(roleData.permissions),
                 mentionable: roleData.mentionable
@@ -170,10 +170,16 @@ async function restoreRoles(guild, roles) {
         }
     }
 
-    try {
-        await guild.roles.setPositions(positionUpdates);
-    } catch (error) {
-        console.error('Error setting role positions:', error.message);
+    // Only update positions if there are roles to update
+    if (positionUpdates.length > 0) {
+        try {
+            await guild.roles.setPositions(positionUpdates);
+            console.log('Role positions updated');
+        } catch (error) {
+            // This can fail if the bot doesn't have permission to move roles above its own position
+            console.error('Could not restore role positions:', error.message);
+            console.log('Note: Role hierarchy may differ from backup due to permission limitations');
+        }
     }
 
     console.log(`Restored ${roleMap.size - 1} roles`);
@@ -212,9 +218,18 @@ async function restoreChannels(guild, channels, roleMap) {
         if (channelData.category) continue; // Skip categories
 
         try {
+            // Convert deprecated channel types
+            let channelType = channelData.type;
+
+            // Type 5 (GuildAnnouncement) is deprecated, convert to GuildText (0)
+            // Announcement features are now handled differently in Discord
+            if (channelType === 5) {
+                channelType = 0; // GuildText
+            }
+
             const createData = {
                 name: channelData.name,
-                type: channelData.type,
+                type: channelType,
                 position: channelData.position,
                 permissionOverwrites: restorePermissionOverwrites(channelData.permissionOverwrites, roleMap)
             };
@@ -228,20 +243,17 @@ async function restoreChannels(guild, channels, roleMap) {
             }
 
             // Add type-specific properties
-            if (channelData.type === ChannelType.GuildText) {
+            // Type 0 = GuildText, Type 5 = GuildAnnouncement (deprecated, treat as text)
+            if (channelType === 0 || channelData.type === 5) {
                 if (channelData.topic) createData.topic = channelData.topic;
                 if (channelData.nsfw !== undefined) createData.nsfw = channelData.nsfw;
                 if (channelData.rateLimitPerUser) createData.rateLimitPerUser = channelData.rateLimitPerUser;
                 if (channelData.defaultAutoArchiveDuration) createData.defaultAutoArchiveDuration = channelData.defaultAutoArchiveDuration;
-            } else if (channelData.type === ChannelType.GuildVoice || channelData.type === ChannelType.GuildStageVoice) {
+            } else if (channelType === 2 || channelType === 13) { // GuildVoice or GuildStageVoice
                 if (channelData.bitrate) createData.bitrate = channelData.bitrate;
                 if (channelData.userLimit) createData.userLimit = channelData.userLimit;
                 if (channelData.rtcRegion) createData.rtcRegion = channelData.rtcRegion;
-            } else if (channelData.type === ChannelType.GuildAnnouncement) {
-                if (channelData.topic) createData.topic = channelData.topic;
-                if (channelData.nsfw !== undefined) createData.nsfw = channelData.nsfw;
-                if (channelData.defaultAutoArchiveDuration) createData.defaultAutoArchiveDuration = channelData.defaultAutoArchiveDuration;
-            } else if (channelData.type === ChannelType.GuildForum) {
+            } else if (channelType === 15) { // GuildForum
                 if (channelData.topic) createData.topic = channelData.topic;
                 if (channelData.nsfw !== undefined) createData.nsfw = channelData.nsfw;
                 if (channelData.rateLimitPerUser) createData.rateLimitPerUser = channelData.rateLimitPerUser;

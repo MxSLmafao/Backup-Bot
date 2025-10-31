@@ -200,7 +200,7 @@ async function backupEmojis(guild) {
     for (const emoji of guild.emojis.cache.values()) {
         emojis.push({
             name: emoji.name,
-            url: emoji.url,
+            url: emoji.imageURL({ size: 256 }),
             animated: emoji.animated,
             roles: emoji.roles.cache.map(r => r.name)
         });
