@@ -79,12 +79,17 @@ npm install
    ```env
    DISCORD_TOKEN=your_bot_token_here
    DISCORD_CLIENT_ID=your_client_id_here
-   BACKUP_PATH=./backups
    ```
 
+   **Required Variables:**
    - **DISCORD_TOKEN**: Your bot token from the Developer Portal
    - **DISCORD_CLIENT_ID**: Your application ID (found in "General Information" section)
-   - **BACKUP_PATH**: Directory where backups will be stored (optional, defaults to ./backups)
+
+   **Optional Variables:**
+   - **BACKUP_PATH**: Directory for backups (defaults to `backups/` in project directory)
+     - You can leave this unset to use the default location
+     - Relative paths are resolved from the project directory
+     - Absolute paths are also supported
 
 ### Step 4: Create Your Discord Bot
 
@@ -238,10 +243,12 @@ Type `/help` to see detailed information about all commands and features. The re
 
 ### Backup Storage
 
-- Backups are stored locally in JSON format
-- Each backup file contains all server data
-- Consider backing up the `backups/` directory to cloud storage
+- Backups are stored locally in the `backups/` folder in your project directory
+- Each backup file is in JSON format and contains all server data
+- Backup files are named: `{guildId}_{timestamp}.json`
+- **Important**: Consider backing up the `backups/` directory to cloud storage for safety
 - Backup files can be large (1-10 MB) for servers with many channels/roles
+- You can customize the backup location using the `BACKUP_PATH` environment variable
 
 ### Limitations
 
@@ -256,8 +263,9 @@ Type `/help` to see detailed information about all commands and features. The re
 ### Bot is not responding
 
 - Check that the bot is online and has the correct permissions
-- Verify your bot token is correct in `config.json`
+- Verify your bot token is correct in `.env`
 - Make sure you enabled the required intents in the Developer Portal
+- Ensure you ran `npm run deploy` to register slash commands
 
 ### Restore is failing
 

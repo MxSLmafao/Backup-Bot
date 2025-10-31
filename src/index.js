@@ -12,10 +12,13 @@ if (!process.env.DISCORD_TOKEN || !process.env.DISCORD_CLIENT_ID) {
     process.exit(1);
 }
 
+// Default backup path in project directory (one level up from src/)
+const DEFAULT_BACKUP_PATH = path.join(__dirname, '..', 'backups');
+
 const config = {
     token: process.env.DISCORD_TOKEN,
     clientId: process.env.DISCORD_CLIENT_ID,
-    backupPath: process.env.BACKUP_PATH || './backups'
+    backupPath: process.env.BACKUP_PATH || DEFAULT_BACKUP_PATH
 };
 
 // Create Discord client
@@ -27,8 +30,10 @@ const client = new Client({
     ]
 });
 
-// Ensure backup directory exists
-const backupPath = path.resolve(config.backupPath);
+// Ensure backup directory exists (resolve to absolute path)
+const backupPath = path.isAbsolute(config.backupPath)
+    ? config.backupPath
+    : path.join(__dirname, '..', config.backupPath);
 if (!fs.existsSync(backupPath)) {
     fs.mkdirSync(backupPath, { recursive: true });
 }
